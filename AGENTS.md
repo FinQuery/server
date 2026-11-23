@@ -1,5 +1,10 @@
 # FinQuery 백엔드 공통 지침 (`FinQuery/server`)
 
+## 0. 작업 진행 원칙
+1. **계획 우선 (Plan First):** 기능 구현·리팩토링 요청 시 코드를 바로 수정하지 않고, 대상 파일·레이어 설계·테스트 전략을 짧게 정리해 먼저 확인받는다. (단순 오타·1줄 설정 수정 등 명백한 소규모 작업은 예외)
+2. **구현 (Implement):** 승인된 계획과 본 문서의 아키텍처·경량화 규칙에 따라 구현한다.
+3. **검증 (Verify):** 각 레이어별 단위 테스트를 작성하고 `./gradlew check`(테스트 통과 + JaCoCo 라인 커버리지 100%) 성공을 확인한 뒤 완료 보고한다.
+
 ## 1. Tech Stack & Environment
 - **Language / Runtime**: Java 21 (LTS)
 - **Framework**: Spring Boot 4.1.3 (`spring-boot-starter-webmvc`, `spring-boot-starter-data-jpa`, `spring-boot-starter-validation`)

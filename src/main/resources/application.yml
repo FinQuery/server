@@ -1,0 +1,26 @@
+spring:
+  application:
+    name: finquery-server
+  main:
+    lazy-initialization: false
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/finquery}
+    username: ${DB_USERNAME:finquery}
+    password: ${DB_PASSWORD:finquery}
+    hikari:
+      maximum-pool-size: 5
+      minimum-idle: 2
+      connection-timeout: 5000
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        default_batch_fetch_size: 100
+
+server:
+  tomcat:
+    threads:
+      max: 30
+      min-spare: 5

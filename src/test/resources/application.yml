@@ -1,0 +1,32 @@
+spring:
+  jmx:
+    enabled: false
+  datasource:
+    url: jdbc:h2:mem:finquery;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: create-drop
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+    jmx:
+      exposure:
+        exclude: "*"
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+  health:
+    diskspace:
+      enabled: false
+  metrics:
+    enable:
+      all: false

@@ -1,8 +1,8 @@
 # FinQuery 백엔드 공통 지침 (`FinQuery/server`)
 
 ## 0. 작업 진행 원칙
-1. **계획 우선 (Plan First):** 기능 구현·리팩토링 요청 시 코드를 바로 수정하지 않고, 대상 파일·레이어 설계·테스트 전략을 짧게 정리해 먼저 확인받는다. (단순 오타·1줄 설정 수정 등 명백한 소규모 작업은 예외)
-2. **구현 (Implement):** 승인된 계획과 본 문서의 아키텍처·경량화 규칙에 따라 구현한다.
+1. **계획 우선 (Plan First):** 기능 구현·리팩토링 요청 시 코드를 바로 수정하지 않고, 대상 파일·레이어 설계·테스트 전략을 짧게 정리해 먼저 확인받는다. 기술선택에 트레이드 오프가 존재한다면 설명한다. (단순 오타·1줄 설정 수정 등 명백한 소규모 작업은 예외)
+2. **구현 (Implement):** 승인된 계획과 본 문서의 아키텍처·경량화 규칙에 따라 구현하고 API 키는 반드시 환경변수로만 주입한다.
 3. **검증 (Verify):** 각 레이어별 단위 테스트를 작성하고 `./gradlew check`(테스트 통과 + JaCoCo 라인 커버리지 100%) 성공을 확인한 뒤 완료 보고한다.
 
 ## 1. Tech Stack & Environment
@@ -49,6 +49,7 @@ com.finquery.server
 - **외부 API 방어**: 외부 API(LLM API, KIS API 등) 호출에는 반드시 타임아웃, 예외 변환, Fallback 처리를 적용한다. API 키·DB 비밀번호는 환경변수로만 주입하며 코드/YAML에 하드코딩 금지.
 
 ## 4. Testing & Quality Gate
+- **테스트 작성 패턴**: 모든 단위 테스트는 `// given`, `// when`, `// then` (예외 검증은 `// when & then`) 구조로 작성하며, `@DisplayName` 및 테스트 명세서 시나리오는 행동 중심 문장식으로 작성한다.
 - **모든 레이어별 단위 테스트 작성 필수**:
   - `domain`: 순수 JUnit 5 단위 테스트
   - `service`: Mockito 기반 단위 테스트 (정상·예외·경계값 케이스 포함)
@@ -63,5 +64,6 @@ com.finquery.server
 
 ## 5. Git, Issue & PR Convention
 - **이슈 태그**: `[Feat]`, `[Refactor]`, `[Docs]`, `[Fix]`, `[Chore]`
+- **브랜치 전략**: 기능 브랜치(`feature/#...`)는 `develop`에 PR로 병합하고, 릴리즈 완료 시 `develop`을 `main`에 병합한다.
 - **브랜치 네이밍**: `feature/#<이슈번호>-<kebab-case-기능명>-ljs` (예: `feature/#2-llm-api-integration-ljs`)
 - **PR 작성**: `FinQuery/.github`의 PR 템플릿 양식을 준수하고, `Closes #<이슈번호>`와 `./gradlew check` 검증 결과(테스트/커버리지 수치)를 반드시 기재한다.

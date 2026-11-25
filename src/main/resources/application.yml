@@ -62,3 +62,15 @@ management:
   metrics:
     enable:
       all: false
+
+llm:
+  default-provider: ${LLM_DEFAULT_PROVIDER:gemini}
+  connect-timeout: ${LLM_CONNECT_TIMEOUT:3s}
+  read-timeout: ${LLM_READ_TIMEOUT:30s}
+  gemini:
+    base-url: ${GEMINI_BASE_URL:https://generativelanguage.googleapis.com}
+    api-key: ${GEMINI_API_KEY:}
+    model: ${GEMINI_MODEL:gemini-2.5-flash}
+  ollama:
+    base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
+    model: ${OLLAMA_MODEL:qwen2.5:7b}

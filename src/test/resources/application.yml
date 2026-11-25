@@ -30,3 +30,15 @@ management:
   metrics:
     enable:
       all: false
+
+llm:
+  default-provider: gemini
+  connect-timeout: 3s
+  read-timeout: 15s
+  gemini:
+    base-url: https://generativelanguage.googleapis.com
+    api-key: test-gemini-api-key
+    model: gemini-2.5-flash
+  ollama:
+    base-url: http://localhost:11434
+    model: qwen2.5:7b

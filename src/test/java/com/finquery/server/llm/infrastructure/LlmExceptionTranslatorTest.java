@@ -9,15 +9,19 @@ import java.io.IOException;
 import java.net.SocketTimeoutException;
 import java.net.http.HttpTimeoutException;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.TimeoutException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.client.ResourceAccessException;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
 
 /**
- * LlmExceptionTranslator가 HTTP 상태 코드 및 네트워크·타임아웃 예외를
+ * LlmExceptionTranslator가 HTTP 상태 코드, 네트워크·타임아웃, 역직렬화 예외를
  * 표준 ErrorCode로 변환하는지 검증한다.
  */
 class LlmExceptionTranslatorTest {
@@ -45,14 +49,15 @@ class LlmExceptionTranslatorTest {
 		assertThat(translated.getCause()).isSameAs(ex);
 	}
 
-	@Test
-	@DisplayName("LLM API가 429 이외의 오류 상태 코드를 반환하면 외부 API 통신 오류 예외로 변환한다")
-	void translateServerError() {
+	@ParameterizedTest
+	@ValueSource(ints = {401, 403, 500})
+	@DisplayName("LLM API가 401·403·500 오류 상태 코드를 반환하면 외부 API 통신 오류 예외로 변환한다")
+	void translateAuthAndServerError(int statusCode) {
 		// given
 		RestClientResponseException ex = new RestClientResponseException(
-			"server error",
-			HttpStatus.INTERNAL_SERVER_ERROR,
-			"Internal Server Error",
+			"http error",
+			HttpStatus.valueOf(statusCode),
+			"Error",
 			HttpHeaders.EMPTY,
 			new byte[0],
 			StandardCharsets.UTF_8
@@ -111,5 +116,31 @@ class LlmExceptionTranslatorTest {
 
 		// then
 		assertThat(translated.getErrorCode()).isEqualTo(ErrorCode.LLM_API_ERROR);
+	}
+
+	@Test
+	@DisplayName("응답 파싱 중 TimeoutException 원인이 포함된 RestClientException은 타임아웃 예외로 변환한다")
+	void translateRestClientExceptionWithTimeoutCause() {
+		// given
+		RestClientException ex = new RestClientException("body timeout", new TimeoutException("timed out"));
+
+		// when
+		BusinessException translated = translator.translate(LlmProvider.GEMINI, ex);
+
+		// then
+		assertThat(translated.getErrorCode()).isEqualTo(ErrorCode.LLM_TIMEOUT);
+	}
+
+	@Test
+	@DisplayName("응답 파싱이나 Content-Type 불일치로 RestClientException이 발생하면 비정상 응답 예외로 변환한다")
+	void translateRestClientExceptionAsInvalidResponse() {
+		// given
+		RestClientException ex = new RestClientException("invalid json");
+
+		// when
+		BusinessException translated = translator.translate(LlmProvider.GEMINI, ex);
+
+		// then
+		assertThat(translated.getErrorCode()).isEqualTo(ErrorCode.LLM_INVALID_RESPONSE);
 	}
 }

@@ -3,7 +3,7 @@
 - **대상 패키지:** `com.finquery.server.chat.service`, `com.finquery.server.chat.controller`, `com.finquery.server.chat.dto`
 - **테스트 범위:** `ChatService`, `ChatController`, `ChatRequest`/`ChatResponse`, `GlobalExceptionHandler`(웹 슬라이스 연동)
 - **작성 패턴:** `given - when - then`
-- **총 테스트 케이스:** 9건
+- **총 테스트 케이스:** 12건
 
 ---
 
@@ -19,10 +19,10 @@
 
 ---
 
-## 2. `ChatControllerTest` (`@WebMvcTest` + `MockMvc` — 7건)
+## 2. `ChatControllerTest` (`@WebMvcTest` + `MockMvc` — 10건)
 
 - **파일:** `src/test/java/com/finquery/server/chat/controller/ChatControllerTest.java`
-- **목적:** `POST /api/chat` HTTP 계약, `@Valid` 입력값 검증, 잘못된 JSON 파싱, LLM 장애 및 미예상 예외의 표준 `ErrorResponse` 응답 검증
+- **목적:** `POST /api/chat` HTTP 계약, `@Valid` 입력값·프로바이더 패턴 검증, 잘못된 JSON/HTTP 메서드/Content-Type 처리, LLM 장애 및 미예상 예외의 표준 `ErrorResponse` 응답 검증
 
 | TC-ID | 테스트 메서드 | 시나리오 | Given | When | Then |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -33,3 +33,6 @@
 | CHT-C05 | `chatLlmTimeoutReturns504` | 외부 LLM 응답 시간이 초과되면 504 Gateway Timeout과 지연 안내 Fallback 문구를 반환한다 | `chatService.chat()`이 `LLM_TIMEOUT` 예외를 던지도록 설정 | `POST /api/chat` 요청 전송 | `504 Gateway Timeout`, `LLM_504_TIMEOUT`, `fallbackMessage` 반환 |
 | CHT-C06 | `chatLlmQuotaExceededReturns429` | 토큰·호출 할당량을 모두 사용하면 429 Too Many Requests와 할당량 초과 Fallback 응답을 반환한다 | `chatService.chat()`이 `LLM_QUOTA_EXCEEDED` 예외를 던지도록 설정 | `POST /api/chat` 요청 전송 | `429 Too Many Requests`, `LLM_429_QUOTA`, `fallbackMessage` 반환 |
 | CHT-C07 | `chatUnexpectedErrorReturns500` | 예상하지 못한 서버 오류가 발생하면 내부 상세를 숨기고 500 에러와 안전 안내 문구를 반환한다 | `chatService.chat()`이 `RuntimeException("sensitive internal detail")`을 던지도록 설정 | `POST /api/chat` 요청 전송 | `500 Internal Server Error`, `COMMON_500`, 내부 원문 미노출 및 기본 `message`/`fallbackMessage` 반환 |
+| CHT-C08 | `chatInvalidProviderPatternReturns400` | 프로바이더 이름에 제어 문자나 허용되지 않은 문자가 포함되면 400 Bad Request를 반환한다 | `{"message":"삼성전자 주가","provider":"gemini\nforged"}` 준비 | `POST /api/chat` 요청 전송 | `400 Bad Request`, `COMMON_400`, `"프로바이더 이름 형식이 올바르지 않습니다."` 반환 |
+| CHT-C09 | `chatGetMethodReturns405` | `POST /api/chat` 경로에 GET 요청을 보내면 500이 아닌 405 Method Not Allowed를 반환한다 | `GET /api/chat` 요청 | `GET /api/chat` 전송 | `405 Method Not Allowed`, `COMMON_405`, `fallbackMessage` 반환 |
+| CHT-C10 | `chatUnsupportedMediaTypeReturns415` | JSON이 아닌 `text/plain` Content-Type으로 요청하면 500이 아닌 415 Unsupported Media Type을 반환한다 | `Content-Type: text/plain` 본문 | `POST /api/chat` 전송 | `415 Unsupported Media Type`, `COMMON_415`, `fallbackMessage` 반환 |

@@ -33,7 +33,7 @@ import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
 /**
- * MockRestServiceServer를 이용해 GeminiLlmClient의 정상 요청·헤더 보안·예외 변환·비정상 응답 방어를 검증한다.
+ * MockRestServiceServer를 이용해 GeminiLlmClient의 정상 요청·멀티 파트/Thinking 응답·헤더 보안·예외 변환·비정상 응답 방어를 검증한다.
  */
 class GeminiLlmClientTest {
 
@@ -45,17 +45,22 @@ class GeminiLlmClientTest {
 	private final LlmExceptionTranslator translator = new LlmExceptionTranslator();
 
 	private LlmProperties createProperties(String apiKey) {
+		return createProperties(apiKey, 1024);
+	}
+
+	private LlmProperties createProperties(String apiKey, Integer maxOutputTokens) {
 		return new LlmProperties(
 			LlmProvider.GEMINI,
 			Duration.ofSeconds(3),
 			Duration.ofSeconds(15),
+			maxOutputTokens,
 			new LlmProperties.GeminiProperties(BASE_URL, apiKey, MODEL),
-			new LlmProperties.OllamaProperties("http://localhost:11434", "qwen2.5:7b")
+			new LlmProperties.OllamaProperties(false, "http://localhost:11434", "qwen2.5:7b")
 		);
 	}
 
 	@Test
-	@DisplayName("시스템 프롬프트와 질문을 전달하면 API 키를 헤더로 보내고 Gemini 답변을 반환한다")
+	@DisplayName("시스템 프롬프트와 질문을 전달하면 API 키를 헤더로 보내고 generationConfig와 함께 Gemini 답변을 반환한다")
 	void generateSuccessWithSystemPrompt() {
 		// given
 		RestClient.Builder builder = RestClient.builder().baseUrl(BASE_URL);
@@ -69,6 +74,7 @@ class GeminiLlmClientTest {
 			.andExpect(jsonPath("$.system_instruction.parts[0].text").value("금융 어시스턴트"))
 			.andExpect(jsonPath("$.contents[0].role").value("user"))
 			.andExpect(jsonPath("$.contents[0].parts[0].text").value("삼성전자 PER 알려줘"))
+			.andExpect(jsonPath("$.generationConfig.maxOutputTokens").value(1024))
 			.andRespond(withSuccess(
 				"""
 				{
@@ -97,6 +103,45 @@ class GeminiLlmClientTest {
 		server.verify();
 	}
 
+	@Test
+	@DisplayName("Thinking 모델 응답에 thought=true 파트와 여러 텍스트 파트가 섞여 있으면 추론 파트를 제외하고 답변만 결합한다")
+	void generateCombinesMultiPartsAndSkipsThoughtParts() {
+		// given
+		RestClient.Builder builder = RestClient.builder().baseUrl(BASE_URL);
+		MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+		GeminiLlmClient client = new GeminiLlmClient(builder.build(), createProperties(API_KEY, null), translator);
+
+		server.expect(requestTo(EXPECTED_URL))
+			.andExpect(jsonPath("$.generationConfig").doesNotExist())
+			.andRespond(withSuccess(
+				"""
+				{
+				  "candidates": [
+				    {
+				      "content": {
+				        "parts": [
+				          { "text": "내부 추론 과정입니다.", "thought": true },
+				          null,
+				          { "text": null, "thought": false },
+				          { "text": "삼성전자 PER은 ", "thought": false },
+				          { "text": "약 12배입니다." }
+				        ]
+				      }
+				    }
+				  ]
+				}
+				""",
+				MediaType.APPLICATION_JSON
+			));
+
+		// when
+		LlmResponse response = client.generate(new LlmRequest("삼성전자 PER", null));
+
+		// then
+		assertThat(response.content()).isEqualTo("삼성전자 PER은 약 12배입니다.");
+		server.verify();
+	}
+
 	@ParameterizedTest
 	@NullAndEmptySource
 	@ValueSource(strings = {"   "})
@@ -105,10 +150,11 @@ class GeminiLlmClientTest {
 		// given
 		RestClient.Builder builder = RestClient.builder().baseUrl(BASE_URL);
 		MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-		GeminiLlmClient client = new GeminiLlmClient(builder.build(), createProperties(API_KEY), translator);
+		GeminiLlmClient client = new GeminiLlmClient(builder.build(), createProperties(API_KEY, 0), translator);
 
 		server.expect(requestTo(EXPECTED_URL))
 			.andExpect(jsonPath("$.system_instruction").doesNotExist())
+			.andExpect(jsonPath("$.generationConfig").doesNotExist())
 			.andExpect(jsonPath("$.contents[0].parts[0].text").value("안녕"))
 			.andRespond(withSuccess(
 				"""
@@ -227,6 +273,25 @@ class GeminiLlmClientTest {
 		server.verify();
 	}
 
+	@Test
+	@DisplayName("업스트림이 200 OK와 함께 HTML 오류 페이지를 반환하면 500 대신 비정상 응답 예외(502)를 던진다")
+	void generateThrowsInvalidResponseOnUnexpectedContentType() {
+		// given
+		RestClient.Builder builder = RestClient.builder().baseUrl(BASE_URL);
+		MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+		GeminiLlmClient client = new GeminiLlmClient(builder.build(), createProperties(API_KEY), translator);
+
+		server.expect(requestTo(EXPECTED_URL))
+			.andRespond(withSuccess("<html>Gateway Error</html>", MediaType.TEXT_HTML));
+
+		// when & then
+		assertThatThrownBy(() -> client.generate(new LlmRequest("질문", null)))
+			.isInstanceOf(BusinessException.class)
+			.extracting(ex -> ((BusinessException) ex).getErrorCode())
+			.isEqualTo(ErrorCode.LLM_INVALID_RESPONSE);
+		server.verify();
+	}
+
 	@ParameterizedTest
 	@ValueSource(strings = {
 		"",
@@ -236,6 +301,8 @@ class GeminiLlmClientTest {
 		"{\"candidates\":[{\"content\":null}]}",
 		"{\"candidates\":[{\"content\":{\"parts\":null}}]}",
 		"{\"candidates\":[{\"content\":{\"parts\":[]}}]}",
+		"{\"candidates\":[{\"content\":{\"parts\":[null]}}]}",
+		"{\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"생각만 함\",\"thought\":true}]}}]}",
 		"{\"candidates\":[{\"content\":{\"parts\":[{\"text\":null}]}}]}",
 		"{\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"   \"}]}}]}"
 	})

@@ -29,7 +29,7 @@ import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
 /**
- * MockRestServiceServer를 이용해 OllamaLlmClient의 정상 요청·stream=false·예외 변환·비정상 응답 방어를 검증한다.
+ * MockRestServiceServer를 이용해 OllamaLlmClient의 정상 요청·stream=false·num_predict·예외 변환·비정상 응답 방어를 검증한다.
  */
 class OllamaLlmClientTest {
 
@@ -40,17 +40,22 @@ class OllamaLlmClientTest {
 	private final LlmExceptionTranslator translator = new LlmExceptionTranslator();
 
 	private LlmProperties createProperties() {
+		return createProperties(1024);
+	}
+
+	private LlmProperties createProperties(Integer maxOutputTokens) {
 		return new LlmProperties(
 			LlmProvider.OLLAMA,
 			Duration.ofSeconds(3),
 			Duration.ofSeconds(30),
+			maxOutputTokens,
 			new LlmProperties.GeminiProperties("https://generativelanguage.googleapis.com", "key", "gemini-2.5-flash"),
-			new LlmProperties.OllamaProperties(BASE_URL, MODEL)
+			new LlmProperties.OllamaProperties(true, BASE_URL, MODEL)
 		);
 	}
 
 	@Test
-	@DisplayName("시스템 프롬프트와 질문을 전달하면 stream=false로 Ollama API를 호출하고 답변을 반환한다")
+	@DisplayName("시스템 프롬프트와 질문을 전달하면 stream=false 및 num_predict와 함께 Ollama API를 호출하고 답변을 반환한다")
 	void generateSuccessWithSystemPrompt() {
 		// given
 		RestClient.Builder builder = RestClient.builder().baseUrl(BASE_URL);
@@ -62,6 +67,7 @@ class OllamaLlmClientTest {
 			.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
 			.andExpect(jsonPath("$.model").value(MODEL))
 			.andExpect(jsonPath("$.stream").value(false))
+			.andExpect(jsonPath("$.options.num_predict").value(1024))
 			.andExpect(jsonPath("$.messages[0].role").value("system"))
 			.andExpect(jsonPath("$.messages[0].content").value("시스템 지시"))
 			.andExpect(jsonPath("$.messages[1].role").value("user"))
@@ -98,9 +104,10 @@ class OllamaLlmClientTest {
 		// given
 		RestClient.Builder builder = RestClient.builder().baseUrl(BASE_URL);
 		MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-		OllamaLlmClient client = new OllamaLlmClient(builder.build(), createProperties(), translator);
+		OllamaLlmClient client = new OllamaLlmClient(builder.build(), createProperties(null), translator);
 
 		server.expect(requestTo(EXPECTED_URL))
+			.andExpect(jsonPath("$.options").doesNotExist())
 			.andExpect(jsonPath("$.messages.length()").value(1))
 			.andExpect(jsonPath("$.messages[0].role").value("user"))
 			.andRespond(withSuccess(
@@ -131,9 +138,10 @@ class OllamaLlmClientTest {
 		// given
 		RestClient.Builder builder = RestClient.builder().baseUrl(BASE_URL);
 		MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-		OllamaLlmClient client = new OllamaLlmClient(builder.build(), createProperties(), translator);
+		OllamaLlmClient client = new OllamaLlmClient(builder.build(), createProperties(0), translator);
 
 		server.expect(requestTo(EXPECTED_URL))
+			.andExpect(jsonPath("$.options").doesNotExist())
 			.andRespond(withSuccess(
 				"""
 				{
@@ -191,6 +199,25 @@ class OllamaLlmClientTest {
 			.isInstanceOf(BusinessException.class)
 			.extracting(ex -> ((BusinessException) ex).getErrorCode())
 			.isEqualTo(ErrorCode.LLM_TIMEOUT);
+		server.verify();
+	}
+
+	@Test
+	@DisplayName("Ollama가 200 OK와 함께 HTML 오류 응답을 반환하면 비정상 응답 예외(502)를 던진다")
+	void generateThrowsInvalidResponseOnUnexpectedContentType() {
+		// given
+		RestClient.Builder builder = RestClient.builder().baseUrl(BASE_URL);
+		MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+		OllamaLlmClient client = new OllamaLlmClient(builder.build(), createProperties(), translator);
+
+		server.expect(requestTo(EXPECTED_URL))
+			.andRespond(withSuccess("<html>error</html>", MediaType.TEXT_HTML));
+
+		// when & then
+		assertThatThrownBy(() -> client.generate(new LlmRequest("질문", null)))
+			.isInstanceOf(BusinessException.class)
+			.extracting(ex -> ((BusinessException) ex).getErrorCode())
+			.isEqualTo(ErrorCode.LLM_INVALID_RESPONSE);
 		server.verify();
 	}
 

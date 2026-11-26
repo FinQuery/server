@@ -2,6 +2,7 @@ package com.finquery.server.chat.controller;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -172,5 +173,48 @@ class ChatControllerTest {
 			.andExpect(jsonPath("$.code").value(ErrorCode.INTERNAL_SERVER_ERROR.getCode()))
 			.andExpect(jsonPath("$.message").value(ErrorCode.INTERNAL_SERVER_ERROR.getMessage()))
 			.andExpect(jsonPath("$.fallbackMessage").value(ErrorCode.INTERNAL_SERVER_ERROR.getFallbackMessage()));
+	}
+
+	@Test
+	@DisplayName("프로바이더 이름에 제어 문자나 허용되지 않은 문자가 포함되면 400 Bad Request를 반환한다")
+	void chatInvalidProviderPatternReturns400() throws Exception {
+		// given
+		String requestBody = "{\"message\":\"삼성전자 주가\",\"provider\":\"gemini\\nforged\"}";
+
+		// when
+		ResultActions result = mockMvc.perform(post("/api/chat")
+			.contentType(MediaType.APPLICATION_JSON)
+			.content(requestBody));
+
+		// then
+		result.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value(ErrorCode.INVALID_INPUT_VALUE.getCode()))
+			.andExpect(jsonPath("$.message").value("프로바이더 이름 형식이 올바르지 않습니다."));
+	}
+
+	@Test
+	@DisplayName("POST /api/chat 경로에 GET 요청을 보내면 500이 아닌 405 Method Not Allowed를 반환한다")
+	void chatGetMethodReturns405() throws Exception {
+		// given & when
+		ResultActions result = mockMvc.perform(get("/api/chat"));
+
+		// then
+		result.andExpect(status().isMethodNotAllowed())
+			.andExpect(jsonPath("$.code").value(ErrorCode.METHOD_NOT_ALLOWED.getCode()))
+			.andExpect(jsonPath("$.fallbackMessage").value(ErrorCode.METHOD_NOT_ALLOWED.getFallbackMessage()));
+	}
+
+	@Test
+	@DisplayName("JSON이 아닌 text/plain Content-Type으로 요청하면 500이 아닌 415 Unsupported Media Type을 반환한다")
+	void chatUnsupportedMediaTypeReturns415() throws Exception {
+		// given & when
+		ResultActions result = mockMvc.perform(post("/api/chat")
+			.contentType(MediaType.TEXT_PLAIN)
+			.content("삼성전자 주가"));
+
+		// then
+		result.andExpect(status().isUnsupportedMediaType())
+			.andExpect(jsonPath("$.code").value(ErrorCode.UNSUPPORTED_MEDIA_TYPE.getCode()))
+			.andExpect(jsonPath("$.fallbackMessage").value(ErrorCode.UNSUPPORTED_MEDIA_TYPE.getFallbackMessage()));
 	}
 }

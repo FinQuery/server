@@ -11,15 +11,19 @@ import java.util.List;
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record GeminiApiRequest(
 	@JsonProperty("system_instruction") Content systemInstruction,
-	List<Content> contents
+	List<Content> contents,
+	GenerationConfig generationConfig
 ) {
 
-	public static GeminiApiRequest from(LlmRequest request) {
+	public static GeminiApiRequest from(LlmRequest request, Integer maxOutputTokens) {
 		Content systemContent = (request.systemPrompt() == null || request.systemPrompt().isBlank())
 			? null
 			: new Content(null, List.of(new Part(request.systemPrompt())));
 		Content userContent = new Content("user", List.of(new Part(request.prompt())));
-		return new GeminiApiRequest(systemContent, List.of(userContent));
+		GenerationConfig config = (maxOutputTokens != null && maxOutputTokens > 0)
+			? new GenerationConfig(maxOutputTokens)
+			: null;
+		return new GeminiApiRequest(systemContent, List.of(userContent), config);
 	}
 
 	/**
@@ -37,6 +41,14 @@ public record GeminiApiRequest(
 	 */
 	public record Part(
 		String text
+	) {
+	}
+
+	/**
+	 * Gemini 출력 토큰 상한 등 생성 설정을 표현한다.
+	 */
+	public record GenerationConfig(
+		Integer maxOutputTokens
 	) {
 	}
 }

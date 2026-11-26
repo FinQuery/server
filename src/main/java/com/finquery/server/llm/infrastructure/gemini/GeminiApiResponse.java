@@ -26,10 +26,11 @@ public record GeminiApiResponse(
 	}
 
 	/**
-	 * 응답 텍스트 파트를 표현한다.
+	 * 응답 텍스트 파트를 표현한다. Thinking 모델의 내부 추론 파트는 thought=true로 전달된다.
 	 */
 	public record Part(
-		String text
+		String text,
+		Boolean thought
 	) {
 	}
 }

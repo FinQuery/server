@@ -5,6 +5,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -50,6 +52,20 @@ public class GlobalExceptionHandler {
 		return ResponseEntity
 			.status(ErrorCode.RESOURCE_NOT_FOUND.getStatus())
 			.body(ErrorResponse.of(ErrorCode.RESOURCE_NOT_FOUND));
+	}
+
+	@ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+	public ResponseEntity<ErrorResponse> handleMethodNotSupportedException(HttpRequestMethodNotSupportedException ex) {
+		return ResponseEntity
+			.status(ErrorCode.METHOD_NOT_ALLOWED.getStatus())
+			.body(ErrorResponse.of(ErrorCode.METHOD_NOT_ALLOWED));
+	}
+
+	@ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+	public ResponseEntity<ErrorResponse> handleMediaTypeNotSupportedException(HttpMediaTypeNotSupportedException ex) {
+		return ResponseEntity
+			.status(ErrorCode.UNSUPPORTED_MEDIA_TYPE.getStatus())
+			.body(ErrorResponse.of(ErrorCode.UNSUPPORTED_MEDIA_TYPE));
 	}
 
 	@ExceptionHandler(Exception.class)

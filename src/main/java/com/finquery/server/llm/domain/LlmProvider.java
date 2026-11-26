@@ -24,7 +24,7 @@ public enum LlmProvider {
 		} catch (IllegalArgumentException ex) {
 			throw new BusinessException(
 				ErrorCode.LLM_UNSUPPORTED_PROVIDER,
-				"지원하지 않는 LLM 프로바이더입니다: " + value.trim(),
+				ErrorCode.LLM_UNSUPPORTED_PROVIDER.getMessage(),
 				ex
 			);
 		}

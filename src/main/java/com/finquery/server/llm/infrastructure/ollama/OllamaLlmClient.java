@@ -9,22 +9,27 @@ import com.finquery.server.llm.infrastructure.LlmExceptionTranslator;
 import com.finquery.server.llm.infrastructure.LlmProperties;
 import com.finquery.server.llm.service.LlmClient;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
 
 /**
  * 로컬 개발 환경에서 비용 없이 LLM 파이프라인을 검증하기 위한 Ollama LlmClient 구현체이다.
+ * 운영 환경에서 외부 요청에 의한 내부 호출을 차단하기 위해 llm.ollama.enabled=true일 때만 빈으로 등록된다.
  */
 @Component
+@ConditionalOnProperty(prefix = "llm.ollama", name = "enabled", havingValue = "true")
 public class OllamaLlmClient implements LlmClient {
 
 	private static final String CHAT_URI = "/api/chat";
 
 	private final RestClient restClient;
 	private final LlmProperties.OllamaProperties properties;
+	private final Integer maxOutputTokens;
 	private final LlmExceptionTranslator exceptionTranslator;
 
 	public OllamaLlmClient(
@@ -34,6 +39,7 @@ public class OllamaLlmClient implements LlmClient {
 	) {
 		this.restClient = restClient;
 		this.properties = properties.ollama();
+		this.maxOutputTokens = properties.maxOutputTokens();
 		this.exceptionTranslator = exceptionTranslator;
 	}
 
@@ -57,12 +63,14 @@ public class OllamaLlmClient implements LlmClient {
 			return restClient.post()
 				.uri(CHAT_URI)
 				.contentType(MediaType.APPLICATION_JSON)
-				.body(OllamaApiRequest.from(properties.model(), request))
+				.body(OllamaApiRequest.from(properties.model(), request, maxOutputTokens))
 				.retrieve()
 				.body(OllamaApiResponse.class);
 		} catch (RestClientResponseException ex) {
 			throw exceptionTranslator.translate(LlmProvider.OLLAMA, ex);
 		} catch (ResourceAccessException ex) {
+			throw exceptionTranslator.translate(LlmProvider.OLLAMA, ex);
+		} catch (RestClientException ex) {
 			throw exceptionTranslator.translate(LlmProvider.OLLAMA, ex);
 		}
 	}
